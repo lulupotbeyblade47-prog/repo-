@@ -233,9 +233,12 @@ select{font-family:'Inter',sans-serif;}
 .profiledropdown .addform input{flex:1;}
 
 /* month slider */
-#monthSlider::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;width:22px;height:22px;border-radius:50%;background:var(--ember);cursor:pointer;border:2px solid var(--bg);box-shadow:0 0 0 2px var(--ember);}
+#monthSlider{height:22px;padding:0;}
+#monthSlider::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;width:22px;height:22px;border-radius:50%;background:var(--ember);cursor:pointer;border:2px solid var(--bg);box-shadow:0 0 0 2px var(--ember);margin-top:-9px;}
 #monthSlider::-moz-range-thumb{width:22px;height:22px;border-radius:50%;background:var(--ember);cursor:pointer;border:2px solid var(--bg);}
 #monthSlider::-webkit-slider-runnable-track{height:4px;border-radius:2px;background:linear-gradient(to right, var(--ember) 0%, var(--ember) var(--pct,0%), var(--border) var(--pct,0%), var(--border) 100%);}
+#monthSlider::-moz-range-track{height:4px;border-radius:2px;background:var(--border);}
+#monthSlider::-moz-range-progress{height:4px;border-radius:2px;background:var(--ember);}
 
 /* seance list */
 .seance-day-title{font-family:'Oswald',sans-serif;font-size:13px;color:var(--ash);text-transform:uppercase;letter-spacing:0.05em;margin:4px 0 10px;}
@@ -332,21 +335,31 @@ select{font-family:'Inter',sans-serif;}
       <div class="records-card-arrow">›</div>
     </div>
 
-    <!-- CURSEUR MOIS/ANNÉE UNIFIÉ -->
-    <div id="monthSliderWrap" class="card" style="padding:14px 16px 10px;">
+    <!-- CURSEUR PÉRIODE MULTI-ÉCHELLE -->
+    <div id="monthSliderWrap" class="card" style="padding:14px 16px 12px;">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
         <label style="margin-bottom:0;font-size:12px;">Période</label>
         <span id="monthSliderLabel" style="font-family:'Oswald',sans-serif;font-size:16px;letter-spacing:0.04em;color:var(--ember);">Tout</span>
       </div>
-      <div style="display:flex;align-items:center;gap:10px;">
-        <button id="monthSliderPrev" style="background:none;border:none;color:var(--ash);font-size:22px;padding:0 4px;cursor:pointer;line-height:1;flex-shrink:0;">‹</button>
-        <input type="range" id="monthSlider" min="0" max="0" value="0"
-          style="flex:1;-webkit-appearance:none;appearance:none;height:4px;border-radius:2px;background:var(--border);outline:none;cursor:pointer;">
-        <button id="monthSliderNext" style="background:none;border:none;color:var(--ash);font-size:22px;padding:0 4px;cursor:pointer;line-height:1;flex-shrink:0;">›</button>
+      <!-- Chips échelle -->
+      <div style="display:flex;gap:6px;margin-bottom:12px;" id="scaleChips">
+        <button class="scale-chip" data-scale="all" style="flex:1;background:var(--surface2);border:1px solid var(--border);color:var(--ash);padding:8px 0;border-radius:100px;font-size:12px;font-family:'Oswald',sans-serif;text-transform:uppercase;letter-spacing:0.04em;cursor:pointer;">Tout</button>
+        <button class="scale-chip" data-scale="year" style="flex:1;background:var(--surface2);border:1px solid var(--border);color:var(--ash);padding:8px 0;border-radius:100px;font-size:12px;font-family:'Oswald',sans-serif;text-transform:uppercase;letter-spacing:0.04em;cursor:pointer;">Année</button>
+        <button class="scale-chip active" data-scale="month" style="flex:1;background:var(--ember);border:1px solid var(--ember);color:#1a0d05;padding:8px 0;border-radius:100px;font-size:12px;font-family:'Oswald',sans-serif;text-transform:uppercase;letter-spacing:0.04em;cursor:pointer;">Mois</button>
+        <button class="scale-chip" data-scale="week" style="flex:1;background:var(--surface2);border:1px solid var(--border);color:var(--ash);padding:8px 0;border-radius:100px;font-size:12px;font-family:'Oswald',sans-serif;text-transform:uppercase;letter-spacing:0.04em;cursor:pointer;">Semaine</button>
       </div>
-      <div style="display:flex;justify-content:space-between;margin-top:6px;">
-        <span id="monthSliderMin" style="font-size:10px;color:var(--ash);font-family:'JetBrains Mono',monospace;"></span>
-        <span id="monthSliderMax" style="font-size:10px;color:var(--ash);font-family:'JetBrains Mono',monospace;"></span>
+      <!-- Curseur (masqué si échelle = all) -->
+      <div id="sliderRow" style="display:none;">
+        <div style="display:flex;align-items:center;gap:10px;">
+          <button id="monthSliderPrev" style="background:none;border:none;color:var(--ash);font-size:22px;padding:0 4px;cursor:pointer;line-height:1;flex-shrink:0;">‹</button>
+          <input type="range" id="monthSlider" min="0" max="0" value="0"
+            style="flex:1;-webkit-appearance:none;appearance:none;height:4px;border-radius:2px;background:var(--border);outline:none;cursor:pointer;">
+          <button id="monthSliderNext" style="background:none;border:none;color:var(--ash);font-size:22px;padding:0 4px;cursor:pointer;line-height:1;flex-shrink:0;">›</button>
+        </div>
+        <div style="display:flex;justify-content:space-between;margin-top:6px;">
+          <span id="monthSliderMin" style="font-size:10px;color:var(--ash);font-family:'JetBrains Mono',monospace;"></span>
+          <span id="monthSliderMax" style="font-size:10px;color:var(--ash);font-family:'JetBrains Mono',monospace;"></span>
+        </div>
       </div>
     </div>
 
@@ -1668,86 +1681,161 @@ const METRIC_META = {
 };
 
 /* ============================================================
-   CURSEUR MOIS/ANNÉE UNIFIÉ
-   monthSliderMonths : tableau trié ['all', 'YYYY-MM', 'YYYY-MM', ...]
-   index 0 = "Tout", index 1+ = mois chronologiques du plus ancien au plus récent
+   CURSEUR PÉRIODE MULTI-ÉCHELLE
+   scale : 'all' | 'week' | 'month' | 'year'
+   sliderPeriods : tableau trié de clés pour l'échelle courante
+   sliderIdx : index courant dans sliderPeriods (0 = plus récent)
    ============================================================ */
-let monthSliderMonths = ['all'];
-let monthSliderIdx = 0; // 0 = Tout
+let sliderScale = 'month';   // échelle active
+let sliderPeriods = [];    // ['2024-W52', ...] ou ['2024-12', ...] ou ['2024', ...]
+let sliderIdx = 99999;     // sera clampé au max = plus récent (droite)
 
-function buildMonthSlider(){
-  const allLogs = statsLogs();
+/* Génère les périodes disponibles selon l'échelle */
+function buildPeriodsForScale(scale, allLogs){
   const set = new Set();
   allLogs.forEach(l=>{
     const d = new Date(l.date);
-    const key = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
-    set.add(key);
+    const y = d.getFullYear();
+    const mo = String(d.getMonth()+1).padStart(2,'0');
+    if(scale==='month'){
+      set.add(`${y}-${mo}`);
+    } else if(scale==='year'){
+      set.add(`${y}`);
+    } else if(scale==='week'){
+      // ISO week key YYYY-Www
+      const tmp = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+      tmp.setUTCDate(tmp.getUTCDate() + 4 - (tmp.getUTCDay()||7));
+      const yearStart = new Date(Date.UTC(tmp.getUTCFullYear(),0,1));
+      const wk = Math.ceil((((tmp - yearStart) / 86400000) + 1)/7);
+      set.add(`${tmp.getUTCFullYear()}-W${String(wk).padStart(2,'0')}`);
+    }
   });
-  const sorted = [...set].sort();
-  monthSliderMonths = ['all', ...sorted];
+  return [...set].sort(); // plus ancien à gauche (index 0), plus récent à droite
+}
+
+/* Libellé lisible d'une période */
+function periodLabel(scale, key){
+  if(scale==='month'){
+    const [y,m] = key.split('-');
+    return new Date(+y,+m-1,1).toLocaleDateString('fr-FR',{month:'long',year:'numeric'});
+  }
+  if(scale==='year') return key;
+  if(scale==='week'){
+    // YYYY-Www → lundi de la semaine
+    const [y, wPart] = key.split('-W');
+    const jan4 = new Date(Date.UTC(+y, 0, 4));
+    const monday = new Date(jan4);
+    monday.setUTCDate(jan4.getUTCDate() - (jan4.getUTCDay()||7) + 1 + (+wPart-1)*7);
+    const sunday = new Date(monday); sunday.setUTCDate(monday.getUTCDate()+6);
+    const fmt = d => d.toLocaleDateString('fr-FR',{day:'2-digit',month:'short'});
+    return `${fmt(monday)} – ${fmt(sunday)}`;
+  }
+  return key;
+}
+
+/* Plage {start, end} pour une période */
+function periodRange(scale, key){
+  if(scale==='month'){
+    const [y,m] = key.split('-').map(Number);
+    return {start: new Date(y,m-1,1), end: new Date(y,m,1)};
+  }
+  if(scale==='year'){
+    const y = +key;
+    return {start: new Date(y,0,1), end: new Date(y+1,0,1)};
+  }
+  if(scale==='week'){
+    const [y, wPart] = key.split('-W');
+    const jan4 = new Date(Date.UTC(+y, 0, 4));
+    const monday = new Date(jan4);
+    monday.setUTCDate(jan4.getUTCDate() - (jan4.getUTCDay()||7) + 1 + (+wPart-1)*7);
+    const sunday = new Date(monday); sunday.setUTCDate(monday.getUTCDate()+7);
+    return {start: monday, end: sunday};
+  }
+  return null;
+}
+
+function getMonthFilter(){
+  if(sliderScale==='all') return null;
+  if(sliderPeriods.length===0) return null;
+  const key = sliderPeriods[sliderIdx];
+  if(!key) return null;
+  return periodRange(sliderScale, key);
+}
+
+function buildMonthSlider(){
+  const allLogs = statsLogs();
+  const wrap = document.getElementById('monthSliderWrap');
+  wrap.style.display = allLogs.length===0 ? 'none' : '';
+
+  if(sliderScale!=='all'){
+    sliderPeriods = buildPeriodsForScale(sliderScale, allLogs);
+    // Clamp idx — 99999 force le démarrage sur la période la plus récente (droite)
+    sliderIdx = Math.min(sliderIdx, Math.max(0, sliderPeriods.length-1));
+  }
 
   const slider = document.getElementById('monthSlider');
-  const max = monthSliderMonths.length - 1;
+  const sliderRow = document.getElementById('sliderRow');
+
+  if(sliderScale==='all'){
+    sliderRow.style.display='none';
+    document.getElementById('monthSliderLabel').textContent='Tout';
+    return;
+  }
+
+  sliderRow.style.display='block';
+  const max = Math.max(0, sliderPeriods.length-1);
   slider.max = max;
-  // Garder idx valide
-  if(monthSliderIdx > max) monthSliderIdx = max;
-  slider.value = monthSliderIdx;
+  slider.value = sliderIdx;
   updateSliderTrack();
   updateMonthSliderLabels();
-
-  // Afficher/masquer le slider selon qu'il y a des données
-  const wrap = document.getElementById('monthSliderWrap');
-  wrap.style.display = max === 0 ? 'none' : '';
 }
 
 function updateSliderTrack(){
   const slider = document.getElementById('monthSlider');
   const max = +slider.max || 1;
   const val = +slider.value;
-  const pct = max === 0 ? 0 : (val / max * 100);
-  slider.style.setProperty('--pct', pct + '%');
+  // val=0 (gauche/ancien) → pct=0, val=max (droite/récent) → pct=100
+  const pct = max===0 ? 0 : (val/max*100);
+  slider.style.setProperty('--pct', pct+'%');
 }
 
 function updateMonthSliderLabels(){
-  const idx = monthSliderIdx;
   const labelEl = document.getElementById('monthSliderLabel');
   const minEl = document.getElementById('monthSliderMin');
   const maxEl = document.getElementById('monthSliderMax');
+  if(sliderScale==='all'){ labelEl.textContent='Tout'; return; }
+  if(sliderPeriods.length===0){ labelEl.textContent='—'; return; }
+  labelEl.textContent = periodLabel(sliderScale, sliderPeriods[sliderIdx]);
+  // Min = plus ancien (index 0 = gauche), Max = plus récent (dernier = droite)
+  const shortFmt = (scale, key)=>{
+    if(scale==='year') return key;
+    if(scale==='month'){const[y,m]=key.split('-');return new Date(+y,+m-1,1).toLocaleDateString('fr-FR',{month:'short',year:'2-digit'});}
+    if(scale==='week'){const[,w]=key.split('-W');return 'S'+w;}
+    return key;
+  };
+  minEl.textContent = shortFmt(sliderScale, sliderPeriods[0]);           // gauche = plus ancien
+  maxEl.textContent = shortFmt(sliderScale, sliderPeriods[sliderPeriods.length-1]); // droite = plus récent
+}
 
-  if(idx === 0){
-    labelEl.textContent = 'Tout';
-  } else {
-    const key = monthSliderMonths[idx]; // 'YYYY-MM'
-    const [y, m] = key.split('-');
-    const d = new Date(+y, +m - 1, 1);
-    labelEl.textContent = d.toLocaleDateString('fr-FR', {month:'long', year:'numeric'});
-  }
-
-  // Extrêmes
-  if(monthSliderMonths.length > 1){
-    const first = monthSliderMonths[1];
-    const last = monthSliderMonths[monthSliderMonths.length - 1];
-    const fmt = key => {
-      const [y,m] = key.split('-');
-      return new Date(+y,+m-1,1).toLocaleDateString('fr-FR',{month:'short',year:'2-digit'});
+/* Chips d'échelle */
+(()=>{
+  document.querySelectorAll('.scale-chip').forEach(chip=>{
+    chip.onclick = ()=>{
+      sliderScale = chip.dataset.scale;
+      sliderIdx = 99999; // clampé au max = plus récent (droite)
+      // Style des chips
+      document.querySelectorAll('.scale-chip').forEach(c=>{
+        const active = c.dataset.scale===sliderScale;
+        c.style.background = active ? 'var(--ember)' : 'var(--surface2)';
+        c.style.borderColor = active ? 'var(--ember)' : 'var(--border)';
+        c.style.color = active ? '#1a0d05' : 'var(--ash)';
+      });
+      buildMonthSlider();
+      renderProgress();
+      renderHistory();
     };
-    minEl.textContent = 'Tout';
-    maxEl.textContent = fmt(last);
-  } else {
-    minEl.textContent = '';
-    maxEl.textContent = '';
-  }
-}
-
-function getMonthFilter(){
-  // Retourne {start, end} pour le mois sélectionné, ou null si "Tout"
-  if(monthSliderIdx === 0) return null;
-  const key = monthSliderMonths[monthSliderIdx];
-  const [y, m] = key.split('-').map(Number);
-  const start = new Date(y, m - 1, 1);
-  const end = new Date(y, m, 1); // premier jour du mois suivant (exclusif)
-  return {start, end};
-}
+  });
+})();
 
 (()=>{
   const slider = document.getElementById('monthSlider');
@@ -1755,26 +1843,28 @@ function getMonthFilter(){
   const next = document.getElementById('monthSliderNext');
 
   slider.oninput = ()=>{
-    monthSliderIdx = +slider.value;
+    sliderIdx = +slider.value;
     updateSliderTrack();
     updateMonthSliderLabels();
     renderProgress();
     renderHistory();
   };
+  // ‹ = vers gauche = plus ancien = idx--
   prev.onclick = ()=>{
-    if(monthSliderIdx > 0){
-      monthSliderIdx--;
-      slider.value = monthSliderIdx;
+    if(sliderIdx > 0){
+      sliderIdx--;
+      slider.value = sliderIdx;
       updateSliderTrack();
       updateMonthSliderLabels();
       renderProgress();
       renderHistory();
     }
   };
+  // › = vers droite = plus récent = idx++
   next.onclick = ()=>{
-    if(monthSliderIdx < monthSliderMonths.length - 1){
-      monthSliderIdx++;
-      slider.value = monthSliderIdx;
+    if(sliderIdx < sliderPeriods.length-1){
+      sliderIdx++;
+      slider.value = sliderIdx;
       updateSliderTrack();
       updateMonthSliderLabels();
       renderProgress();
@@ -1813,10 +1903,19 @@ function renderProgress(){
 document.getElementById('statExSelect').onchange = renderProgress;
 
 function renderCurveChart(wrap, rows, metrics, exName, emomRows){
-  const W = 640, H = 200, PAD_L = 8, PAD_R = 8, PAD_T = 30, PAD_B = 4;
-  const EMOM_COLOR = '#7c6fe0'; // violet distinctif
+  const W = 640, H = 230;
+  // Paddings généreux : les labels de valeur (≈10px font) ont besoin de place en haut,
+  // et les points extrêmes ont besoin de marge sur les côtés (text-anchor:middle → demi-largeur déborde).
+  const LABEL_H   = 12; // hauteur d'un label texte (font-size 10 + 2px marge)
+  const LABEL_HALF_W = 26; // demi-largeur max estimée d'un label valeur en unités SVG
+  const PAD_T  = LABEL_H * (metrics.length + 1) + 6; // assez pour empiler tous les labels
+  const PAD_B  = 6;
+  const PAD_L  = LABEL_HALF_W + 4;
+  const PAD_R  = LABEL_HALF_W + 4;
+  const EMOM_COLOR = '#7c6fe0';
+  const MIN_LABEL_GAP = 54; // distance X minimale entre deux labels de valeur
 
-  // Toutes les lignes (normales + EMOM) sur le même axe X temporel
+  // ---- Axe X temporel commun ----
   const allDates = [
     ...rows.map(l=>new Date(l.date).getTime()),
     ...(emomRows||[]).map(l=>new Date(l.date).getTime())
@@ -1824,55 +1923,87 @@ function renderCurveChart(wrap, rows, metrics, exName, emomRows){
   const tMin = allDates.length ? Math.min(...allDates) : 0;
   const tMax = allDates.length ? Math.max(...allDates) : 1;
   const tSpan = (tMax - tMin) || 1;
-  const xAt = t => PAD_L + ((t - tMin)/tSpan) * (W - PAD_L - PAD_R);
-  // Si un seul point, centrer
-  const xAtSingle = (t, total) => total===1 ? W/2 : xAt(t);
+  const xRaw  = t => PAD_L + ((t - tMin)/tSpan) * (W - PAD_L - PAD_R);
+  const xAt   = (t, total) => total === 1 ? W/2 : xRaw(t);
   const totalPts = allDates.length;
 
-  // Courbes normales — chaque métrique a son propre axe Y (indépendant)
-  const LABEL_OFFSETS = [-9, 14, -18]; // au-dessus / en-dessous / encore plus haut
-  const seriesData = metrics.map((m, mi)=>{
+  // Clamp une position X de label pour qu'elle reste dans [PAD_L, W-PAD_R]
+  const clampX = cx => Math.max(PAD_L, Math.min(W - PAD_R, cx));
+  // Clamp une position Y de label pour qu'elle reste dans [LABEL_H, H - PAD_B - 4]
+  const clampY = y => Math.max(LABEL_H, Math.min(H - PAD_B - 4, y));
+
+  // Sélectionne les indices à étiqueter :
+  // - candidats = dernier point de chaque run de valeurs consécutives identiques
+  // - puis filtre anti-chevauchement gauche→droite (MIN_LABEL_GAP)
+  function pickLabelIndices(vals, cxArr){
+    const candidates = [];
+    for(let i=0;i<vals.length;i++){
+      if(i===vals.length-1 || vals[i]!==vals[i+1]) candidates.push(i);
+    }
+    const kept=new Set(); let lastX=-9999;
+    for(const idx of candidates){
+      if(cxArr[idx]-lastX>=MIN_LABEL_GAP){ kept.add(idx); lastX=cxArr[idx]; }
+    }
+    return kept;
+  }
+
+  // ---- Courbes normales ----
+  // Chaque série a son propre axe Y normalisé sur [PAD_T, H-PAD_B].
+  // Les labels sont placés au-dessus du point, décalés par série pour éviter la superposition.
+  // L'offset Y par série est calculé depuis le haut : série 0 → +LABEL_H, série 1 → +LABEL_H*2, etc.
+  const seriesData = metrics.map((m)=>{
     const vals = rows.map(l=> l.sets.reduce((a,s)=> Math.max(a, s[m]||0), 0));
-    const max = Math.max(...vals, 1);
+    const maxV = Math.max(...vals, 1);
     const minV = Math.min(...vals, 0);
-    const span = (max-minV) || 1;
-    const yAt = v => H - PAD_B - ((v-minV)/span) * (H-PAD_T-PAD_B);
+    const span = (maxV-minV)||1;
+    const yAt  = v => H - PAD_B - ((v-minV)/span)*(H-PAD_T-PAD_B);
     return {m, vals, yAt};
   });
 
   const seriesSvg = seriesData.map(({m, vals, yAt}, mi)=>{
-    const pts = rows.map((l,i)=>`${xAtSingle(new Date(l.date).getTime(),totalPts)},${yAt(vals[i])}`).join(' ');
-    const off = LABEL_OFFSETS[mi % LABEL_OFFSETS.length];
-    const db = off < 0 ? 'auto' : 'hanging';
+    const cxArr = rows.map(l=> xAt(new Date(l.date).getTime(), totalPts));
+    const pts   = rows.map((l,i)=>`${cxArr[i]},${yAt(vals[i])}`).join(' ');
+    const labelSet = pickLabelIndices(vals, cxArr);
+    // Offset vertical : chaque série décale son label d'un cran supplémentaire vers le haut
+    // pour que plusieurs séries au même X ne se superposent pas.
+    const yLabelOff = LABEL_H * (mi + 1); // ex : 12, 24, 36 px au-dessus du point
     const dots = vals.map((v,i)=>{
-      const cx = xAtSingle(new Date(rows[i].date).getTime(), totalPts);
+      const cx = cxArr[i];
       const cy = yAt(v);
-      return `<circle cx="${cx}" cy="${cy}" r="4" fill="${METRIC_META[m].color}"></circle>
-        <text x="${cx}" y="${cy+off}" font-size="10" fill="${METRIC_META[m].color}" text-anchor="middle" font-family="JetBrains Mono, monospace" dominant-baseline="${db}">${v}${METRIC_META[m].unit}</text>`;
+      const showLabel = labelSet.has(i);
+      // Position Y du label : au-dessus du point, clampée pour ne pas sortir en haut
+      const ly = clampY(cy - yLabelOff);
+      // Position X du label : clampée pour ne pas sortir sur les côtés
+      const lx = clampX(cx);
+      return `<circle cx="${cx}" cy="${cy}" r="4" fill="${METRIC_META[m].color}"></circle>`
+        + (showLabel
+          ? `<text x="${lx}" y="${ly}" font-size="10" fill="${METRIC_META[m].color}" text-anchor="middle" font-family="JetBrains Mono, monospace" dominant-baseline="auto">${v}${METRIC_META[m].unit}</text>`
+          : '');
     }).join('');
     return `<polyline points="${pts}" fill="none" stroke="${METRIC_META[m].color}" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round" opacity="0.9"></polyline>${dots}`;
   }).join('');
 
-  // Courbe EMOM (axe Y indépendant, label "min-reps")
-  let emomSvg = '';
-  let emomLegend = '';
+  // ---- Courbe EMOM ----
+  let emomSvg = '', emomLegend = '';
   if(emomRows && emomRows.length > 0){
-    // Valeur EMOM = rounds faits × minutes du bloc
     const emomPts = emomRows.map(l=>{
-      const s = l.sets && l.sets[0] ? l.sets[0] : {};
-      const rounds = s.emomRounds || 0;
-      const min = s.emomMinutes || 0;
-      return {t: new Date(l.date).getTime(), min, rounds, label:`${rounds}r×${min}min`};
+      const s = l.sets&&l.sets[0] ? l.sets[0] : {};
+      return {t:new Date(l.date).getTime(), rounds:s.emomRounds||0, min:s.emomMinutes||0,
+              label:`${s.emomRounds||0}r×${s.emomMinutes||0}min`};
     }).sort((a,b)=>a.t-b.t);
-    // Axe Y propre au score rounds*min
     const scores = emomPts.map(p=>p.rounds*p.min);
-    const maxS = Math.max(...scores,1), minS = Math.min(...scores,0), spanS=(maxS-minS)||1;
-    const yE = s => H - PAD_B - ((s-minS)/spanS)*(H-PAD_T-PAD_B);
-    const lineE = emomPts.map(p=>`${xAtSingle(p.t,totalPts)},${yE(p.rounds*p.min)}`).join(' ');
-    const dotsE = emomPts.map(p=>{
-      const cx = xAtSingle(p.t,totalPts), cy=yE(p.rounds*p.min);
-      return `<circle cx="${cx}" cy="${cy}" r="4" fill="${EMOM_COLOR}"></circle>
-        <text x="${cx}" y="${cy-9}" font-size="10" fill="${EMOM_COLOR}" text-anchor="middle" font-family="JetBrains Mono, monospace" dominant-baseline="auto">${p.label}</text>`;
+    const maxS=Math.max(...scores,1), minS=Math.min(...scores,0), spanS=(maxS-minS)||1;
+    const yE   = s => H - PAD_B - ((s-minS)/spanS)*(H-PAD_T-PAD_B);
+    const emomCxArr = emomPts.map(p=> xAt(p.t, totalPts));
+    const lineE = emomPts.map((p,i)=>`${emomCxArr[i]},${yE(p.rounds*p.min)}`).join(' ');
+    const emomLabelSet = pickLabelIndices(emomPts.map(p=>p.label), emomCxArr);
+    const dotsE = emomPts.map((p,i)=>{
+      const cx=emomCxArr[i], cy=yE(p.rounds*p.min);
+      const showLabel = emomLabelSet.has(i);
+      const ly = clampY(cy - LABEL_H);
+      const lx = clampX(cx);
+      return `<circle cx="${cx}" cy="${cy}" r="4" fill="${EMOM_COLOR}"></circle>`
+        +(showLabel ? `<text x="${lx}" y="${ly}" font-size="10" fill="${EMOM_COLOR}" text-anchor="middle" font-family="JetBrains Mono, monospace" dominant-baseline="auto">${p.label}</text>` : '');
     }).join('');
     emomSvg = `<polyline points="${lineE}" fill="none" stroke="${EMOM_COLOR}" stroke-width="2" stroke-dasharray="5,3" stroke-linejoin="round" stroke-linecap="round" opacity="0.85"></polyline>${dotsE}`;
     emomLegend = `<span style="display:inline-flex;align-items:center;gap:5px;margin-right:14px;">
@@ -1889,21 +2020,24 @@ function renderCurveChart(wrap, rows, metrics, exName, emomRows){
     emomLegend
   ].join('');
 
-  // Labels axe X : toutes les dates uniques, espacées
+  // ---- Labels axe X (dates) ----
   const allPtDates = [
     ...rows.map(l=>({t:new Date(l.date).getTime(), d:l.date})),
     ...(emomRows||[]).map(l=>({t:new Date(l.date).getTime(), d:l.date}))
   ].sort((a,b)=>a.t-b.t);
-  // Dédupliquer et limiter à ~8 labels
-  const step = Math.max(1, Math.ceil(allPtDates.length/8));
-  const labelDates = allPtDates.filter((_,i)=>i%step===0||i===allPtDates.length-1);
-  const labelsHtml = `<svg viewBox="0 0 ${W} 14" style="width:100%;height:14px;display:block;">` +
-    labelDates.map(p=>`<text x="${xAtSingle(p.t,totalPts)}" y="10" font-size="10" fill="var(--ash)" text-anchor="middle" font-family="JetBrains Mono, monospace">${new Date(p.d).toLocaleDateString('fr-FR',{day:'2-digit',month:'2-digit',year:'2-digit'})}</text>`).join('') +
-    `</svg>`;
+  const seen=new Set();
+  const uniqPtDates = allPtDates.filter(p=>{ const k=new Date(p.d).toDateString(); if(seen.has(k)) return false; seen.add(k); return true; });
+  const DATE_LABEL_W = 58;
+  const maxDateLabels = Math.max(1, Math.floor((W - PAD_L - PAD_R) / DATE_LABEL_W));
+  const stepD = Math.max(1, Math.ceil(uniqPtDates.length / maxDateLabels));
+  const labelDates = uniqPtDates.filter((_,i)=> i%stepD===0 || i===uniqPtDates.length-1);
+  const labelsHtml = `<svg viewBox="0 0 ${W} 14" style="width:100%;height:14px;display:block;">`
+    + labelDates.map(p=>`<text x="${clampX(xAt(p.t,totalPts))}" y="10" font-size="10" fill="var(--ash)" text-anchor="middle" font-family="JetBrains Mono, monospace">${new Date(p.d).toLocaleDateString('fr-FR',{day:'2-digit',month:'2-digit',year:'2-digit'})}</text>`).join('')
+    + `</svg>`;
 
   wrap.innerHTML = `
     <div style="margin-bottom:8px;flex-wrap:wrap;display:flex;">${legend}</div>
-    <svg viewBox="0 0 ${W} ${H}" style="width:100%;height:${H}px;display:block;">${seriesSvg}${emomSvg}</svg>
+    <svg viewBox="0 0 ${W} ${H}" style="width:100%;height:${H}px;display:block;overflow:visible;">${seriesSvg}${emomSvg}</svg>
     ${labelsHtml}
   `;
 }
@@ -2163,24 +2297,42 @@ function prHistoryFor(exName){
   return prs.filter(p=>p.exercise===exName).sort((a,b)=> new Date(a.date) - new Date(b.date));
 }
 function renderPRChart(wrap, rows, unit){
-  const W = 640, H = 190, PAD_L = 8, PAD_R = 8, PAD_T = 28, PAD_B = 4;
+  const W = 640, H = 200;
+  const LABEL_H = 12, LABEL_HALF_W = 24;
+  const PAD_T = LABEL_H + 6, PAD_B = 6, PAD_L = LABEL_HALF_W + 4, PAD_R = LABEL_HALF_W + 4;
+  const MIN_LABEL_GAP = 54;
   const n = rows.length;
-  const xAt = i => n===1 ? W/2 : PAD_L + (i/(n-1))*(W-PAD_L-PAD_R);
+  const xAt   = i => n===1 ? W/2 : PAD_L + (i/(n-1))*(W-PAD_L-PAD_R);
+  const clampX = cx => Math.max(PAD_L, Math.min(W-PAD_R, cx));
+  const clampY = y  => Math.max(LABEL_H, Math.min(H-PAD_B-4, y));
   const vals = rows.map(p=>p.value);
-  const max = Math.max(...vals);
-  const min = Math.min(...vals, 0);
-  const span = (max-min) || 1;
-  const yAt = v => H - PAD_B - ((v-min)/span) * (H-PAD_T-PAD_B);
-  const pts = vals.map((v,i)=> `${xAt(i)},${yAt(v)}`).join(' ');
+  const maxV = Math.max(...vals);
+  const minV = Math.min(...vals, 0);
+  const span = (maxV-minV)||1;
+  const yAt  = v => H - PAD_B - ((v-minV)/span)*(H-PAD_T-PAD_B);
+  const pts  = vals.map((v,i)=>`${xAt(i)},${yAt(v)}`).join(' ');
+  const cxArr = vals.map((_,i)=> xAt(i));
+  // Candidats : dernier de chaque run consécutif → filtre anti-chevauchement
+  const candidates=[];
+  for(let i=0;i<vals.length;i++){ if(i===vals.length-1||vals[i]!==vals[i+1]) candidates.push(i); }
+  const labelSet=new Set(); let lastX=-9999;
+  for(const idx of candidates){ if(cxArr[idx]-lastX>=MIN_LABEL_GAP){labelSet.add(idx);lastX=cxArr[idx];} }
   const dots = vals.map((v,i)=>{
-    const cx = xAt(i), cy = yAt(v);
-    return `<circle cx="${cx}" cy="${cy}" r="4" fill="var(--amber)"></circle>
-      <text x="${cx}" y="${cy-9}" font-size="10" fill="var(--amber)" text-anchor="middle" font-family="JetBrains Mono, monospace">${v}${unit}</text>`;
+    const cx=cxArr[i], cy=yAt(v), show=labelSet.has(i);
+    const lx=clampX(cx), ly=clampY(cy-LABEL_H);
+    return `<circle cx="${cx}" cy="${cy}" r="4" fill="var(--amber)"></circle>`
+      +(show?`<text x="${lx}" y="${ly}" font-size="10" fill="var(--amber)" text-anchor="middle" font-family="JetBrains Mono, monospace" dominant-baseline="auto">${v}${unit}</text>`:'');
   }).join('');
-  const labels = rows.map(p=> `<div style="flex:1;text-align:center;font-size:10px;color:var(--ash);">${new Date(p.date).toLocaleDateString('fr-FR',{day:'2-digit',month:'2-digit'})}</div>`).join('');
+  // Labels X dates : anti-chevauchement
+  const DATE_W=48, maxL=Math.max(1,Math.floor((W-PAD_L-PAD_R)/DATE_W));
+  const step=Math.max(1,Math.ceil(n/maxL));
+  const dateLabels=rows.map((p,i)=>{
+    if(i%step!==0&&i!==n-1) return '';
+    return `<text x="${clampX(xAt(i))}" y="10" font-size="10" fill="var(--ash)" text-anchor="middle" font-family="JetBrains Mono, monospace">${new Date(p.date).toLocaleDateString('fr-FR',{day:'2-digit',month:'2-digit'})}</text>`;
+  }).join('');
   wrap.innerHTML = `
-    <svg viewBox="0 0 ${W} ${H}" style="width:100%;height:${H}px;display:block;"><polyline points="${pts}" fill="none" stroke="var(--amber)" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round" opacity="0.9"></polyline>${dots}</svg>
-    <div style="display:flex;margin-top:2px;">${labels}</div>
+    <svg viewBox="0 0 ${W} ${H}" style="width:100%;height:${H}px;display:block;overflow:visible;"><polyline points="${pts}" fill="none" stroke="var(--amber)" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round" opacity="0.9"></polyline>${dots}</svg>
+    <svg viewBox="0 0 ${W} 14" style="width:100%;height:14px;display:block;">${dateLabels}</svg>
   `;
 }
 let pendingDeletePRId = null;
