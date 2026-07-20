@@ -308,9 +308,12 @@ select{font-family:'Inter',sans-serif;}
 
   <!-- STATS VIEW -->
   <section class="view" id="view-stats">
-    <div class="field" style="margin-bottom:14px;">
-      <label>Profil</label>
-      <select id="statsProfileSelect"></select>
+    <div style="margin-bottom:14px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+        <label style="margin-bottom:0;">Profils</label>
+        <button id="statsSelectAllBtn" style="background:none;border:none;color:var(--ember);font-family:'Oswald',sans-serif;font-size:12px;text-transform:uppercase;letter-spacing:0.04em;cursor:pointer;padding:0;">Tout sel.</button>
+      </div>
+      <div id="statsProfileCheckboxes" style="display:flex;flex-wrap:wrap;gap:8px;"></div>
     </div>
     <!-- Records card -->
     <div class="records-card" id="recordsCardBtn">
@@ -340,7 +343,7 @@ select{font-family:'Inter',sans-serif;}
           </select>
         </div>
       </div>
-      <div class="record" id="statRecordRow" style="cursor:pointer;user-select:none;" title="Ajouter / voir le record pour cet exercice"><span class="val num" id="statRecord">—</span><span class="lbl">Record perso</span><span style="font-size:12px;color:var(--ash);margin-left:6px;">✏️</span></div>
+      <div class="record"><span class="val num" id="statRecord">—</span><span class="lbl">Record perso</span></div>
       <div id="progressCurveWrap"></div>
     </div>
 
@@ -348,7 +351,7 @@ select{font-family:'Inter',sans-serif;}
       <h2>Historique</h2>
       <select id="filterEx" style="width:auto;font-size:12px;padding:6px 10px;"></select>
     </div>
-    <div class="card" id="historyCard" style="padding:6px 16px;"></div>
+    <div id="historyCard"></div>
   </section>
 
 </div><!-- /views-track -->
@@ -398,9 +401,17 @@ select{font-family:'Inter',sans-serif;}
     <label>Exercice</label>
     <select id="prExSelect"></select>
   </div>
-  <div id="prNewExZone" style="margin:-6px 0 10px;"></div>
-  <button class="btn ghost" id="prCreateExBtn" style="margin-bottom:14px;font-size:13px;padding:8px 14px;">+ Créer un exercice</button>
-  <div id="prFieldsZone"></div>
+  <div class="field">
+    <label>Valeur</label>
+    <div style="display:flex;gap:8px;align-items:center;">
+      <div class="stepper" style="flex:1;">
+        <button class="stepbtn" id="prValMinus">−</button>
+        <input type="number" id="prValInput" value="0" min="0" step="1">
+        <button class="stepbtn" id="prValPlus">+</button>
+        <span class="unit" id="prValUnit">reps</span>
+      </div>
+    </div>
+  </div>
   <div class="field">
     <label>Date</label>
     <input type="date" id="prDateInput" style="font-family:'Inter',sans-serif;">
@@ -444,14 +455,15 @@ select{font-family:'Inter',sans-serif;}
 
 <script>
 /* ---------------- storage helpers ---------------- */
-// Reads are await'd only at init. Writes are fire-and-forget so the UI never blocks.
+// localStorage natif — persiste entre les sessions dans le navigateur
 async function sGet(key, fallback){
-  try{ const r = await window.storage.get(key); return r? JSON.parse(r.value): fallback; }
-  catch(e){ return fallback; }
+  try{
+    const raw = localStorage.getItem(key);
+    return raw !== null ? JSON.parse(raw) : fallback;
+  }catch(e){ return fallback; }
 }
 function sSet(key, val){
-  // non-blocking: write happens in background, UI updates immediately
-  try{ window.storage.set(key, JSON.stringify(val)); }catch(e){}
+  try{ localStorage.setItem(key, JSON.stringify(val)); }catch(e){}
 }
 
 /* ---------------- nav (swipe) ---------------- */
@@ -861,7 +873,6 @@ let exercises = [];
 let logs = [];
 let profiles = [];
 let activeProfileId = 'default';
-let statsProfileId = 'all'; // 'all' ou un id de profil — indépendant du profil actif du tracker
 let currentDay = DAY_KEYS[(new Date().getDay()+6)%7];
 let currentSeanceRef = null; // {day, idx}
 
@@ -1188,6 +1199,23 @@ function renderSeanceDetail(){
 function normalizeSearch(s){
   return (s||'').toString().normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().trim();
 }
+
+let pendingDeleteExName = null;
+let pendingDeleteExTimer = null;
+function deleteExercise(name){
+  // Supprime l'exercice de la liste
+  exercises = exercises.filter(e=> e.name !== name);
+  sSet('forge-exercises', exercises);
+  // Supprime les logs associés
+  logs = logs.filter(l=> l.exercise !== name);
+  sSet('forge-logs', logs);
+  // Supprime les records associés
+  prs = prs.filter(p=> p.exercise !== name);
+  savePRs();
+  renderExSelects();
+  renderRecordsCard();
+}
+
 function renderExercisePicker(container, onPick){
   container.innerHTML = `
     <div class="field" style="margin-bottom:10px;">
@@ -1205,12 +1233,41 @@ function renderExercisePicker(container, onPick){
       results.innerHTML = '<div class="empty" style="padding:14px 0;">Aucun exercice trouvé — crée-le ci-dessous.</div>';
       return;
     }
-    results.innerHTML = matches.map(e=>`<div class="seancerow" data-name="${e.name}" style="padding:12px 14px;margin-bottom:8px;min-height:auto;"><span class="name" style="font-size:14px;">${e.name}</span></div>`).join('');
+    results.innerHTML = matches.map(e=>{
+      const pending = pendingDeleteExName === e.name;
+      const delBtn = pending
+        ? `<button class="del-ex-btn confirm" data-exdel="${e.name}" style="background:var(--danger);color:#fff;border:none;border-radius:8px;padding:6px 10px;font-size:11px;font-family:'Oswald',sans-serif;text-transform:uppercase;letter-spacing:0.03em;white-space:nowrap;flex-shrink:0;cursor:pointer;">Confirmer ×</button>`
+        : `<button class="del-ex-btn" data-exdel="${e.name}" style="background:none;border:none;color:var(--danger);font-size:20px;padding:0 6px;line-height:1;flex-shrink:0;cursor:pointer;">×</button>`;
+      return `<div class="seancerow" data-name="${e.name}" style="padding:10px 14px;margin-bottom:8px;min-height:auto;display:flex;align-items:center;justify-content:space-between;">
+        <span class="name" style="font-size:14px;flex:1;">${e.name}</span>
+        ${delBtn}
+      </div>`;
+    }).join('');
     results.querySelectorAll('[data-name]').forEach(row=>{
-      row.onclick = ()=> onPick(row.dataset.name);
+      row.onclick = (e)=>{
+        if(e.target.closest('.del-ex-btn')) return;
+        onPick(row.dataset.name);
+      };
+    });
+    results.querySelectorAll('.del-ex-btn').forEach(btn=>{
+      btn.onclick = (e)=>{
+        e.stopPropagation();
+        const name = btn.dataset.exdel;
+        clearTimeout(pendingDeleteExTimer);
+        if(pendingDeleteExName === name){
+          // Confirmation : suppression effective
+          pendingDeleteExName = null;
+          deleteExercise(name);
+          renderResults();
+        } else {
+          pendingDeleteExName = name;
+          renderResults();
+          pendingDeleteExTimer = setTimeout(()=>{ pendingDeleteExName=null; renderResults(); }, 3000);
+        }
+      };
     });
   }
-  input.oninput = renderResults;
+  input.oninput = ()=>{ pendingDeleteExName=null; clearTimeout(pendingDeleteExTimer); renderResults(); };
   renderResults();
   setTimeout(()=> input.focus(), 30);
   container.querySelector('#exSearchNewToggle').onclick = ()=>{
@@ -1413,14 +1470,57 @@ function renderHistory(){
   const filter = document.getElementById('filterEx').value;
   const el = document.getElementById('historyCard');
   const rows = statsLogs().filter(l=> !filter || l.exercise===filter);
-  if(rows.length===0){ el.innerHTML = '<div class="empty">Pas encore de séance enregistrée.</div>'; return; }
-  el.innerHTML = rows.map(l=>{
-    return `<div class="logentry">
-      <div class="head"><span class="ex">${l.exercise}</span><span class="date">${fmtDate(l.date)}</span></div>
-      <div class="setpills">${l.sets.map(s=>`<span class="pill">${setPillText(s)}</span>`).join('')}</div>
-      <button class="rm" data-del="${l.id}" style="background:none;border:none;color:var(--danger);font-size:12px;margin-top:6px;">Supprimer</button>
+  if(rows.length===0){
+    el.innerHTML = '<div class="card"><div class="empty">Pas encore de séance enregistrée.</div></div>';
+    return;
+  }
+
+  // Grouper par session (sessionId ou id si absent)
+  const sessionMap = new Map();
+  rows.forEach(l=>{
+    const sid = l.sessionId || l.id;
+    if(!sessionMap.has(sid)){
+      sessionMap.set(sid, {
+        sessionId: sid,
+        date: l.date,
+        routine: l.routine || '—',
+        profileId: l.profileId || 'default',
+        entries: []
+      });
+    }
+    sessionMap.get(sid).entries.push(l);
+  });
+
+  // Trier par date desc
+  const sessions = [...sessionMap.values()].sort((a,b)=> new Date(b.date) - new Date(a.date));
+
+  el.innerHTML = sessions.map(s=>{
+    const d = new Date(s.date);
+    const dateStr = d.toLocaleDateString('fr-FR',{weekday:'short',day:'2-digit',month:'short',year:'numeric'});
+    const prof = profiles.find(p=>p.id===s.profileId);
+    const profName = prof ? prof.name : '';
+
+    const exLines = s.entries.map(l=>{
+      const pills = l.sets.map(set=>`<span class="pill">${setPillText(set)}</span>`).join('');
+      return `<div style="display:flex;align-items:baseline;gap:8px;padding:6px 0;border-bottom:1px solid var(--border);flex-wrap:wrap;">
+        <span style="font-weight:600;font-size:14px;flex:1;min-width:120px;">${l.exercise}</span>
+        <div class="setpills" style="margin:0;flex:2;">${pills}</div>
+        <button data-del="${l.id}" style="background:none;border:none;color:var(--danger);font-size:18px;padding:0 2px;cursor:pointer;line-height:1;flex-shrink:0;">×</button>
+      </div>`;
+    }).join('');
+
+    return `<div class="card" style="padding:0;margin-bottom:10px;overflow:hidden;">
+      <div style="padding:12px 16px 10px;background:var(--surface2);border-bottom:1px solid var(--border);display:flex;align-items:baseline;justify-content:space-between;gap:8px;">
+        <div>
+          <div style="font-family:'Oswald',sans-serif;font-size:15px;text-transform:uppercase;letter-spacing:0.02em;">${s.routine}</div>
+          <div style="font-size:11px;color:var(--ash);font-family:'JetBrains Mono',monospace;margin-top:2px;">${dateStr}${profName ? ' · '+profName : ''}</div>
+        </div>
+        <div style="font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--ash);white-space:nowrap;">${s.entries.length} exo${s.entries.length>1?'s':''}</div>
+      </div>
+      <div style="padding:0 16px 4px;">${exLines}</div>
     </div>`;
   }).join('');
+
   el.querySelectorAll('[data-del]').forEach(b=> b.onclick = ()=>{
     logs = logs.filter(l=>l.id!==b.dataset.del);
     sSet('forge-logs', logs);
@@ -1458,23 +1558,71 @@ function renderInlineNewExForm(container, onCreated){
 function profileLogs(){
   return logs.filter(l => (l.profileId||'default') === activeProfileId);
 }
-/* Logs pour l'onglet Stats : indépendant du profil actif du tracker.
-   'all' = toutes les séances, tous profils confondus. */
+/* Logs pour l'onglet Stats : multi-sélection de profils.
+   statsProfileIds = Set d'ids. Vide = tout. */
+let statsProfileIds = new Set(); // vide = tous les profils
+
 function statsLogs(){
-  if(statsProfileId === 'all') return logs.slice();
-  return logs.filter(l => (l.profileId||'default') === statsProfileId);
+  if(statsProfileIds.size === 0) return logs.slice();
+  return logs.filter(l => statsProfileIds.has(l.profileId||'default'));
 }
+
 function renderStatsProfileSelect(){
-  const sel = document.getElementById('statsProfileSelect');
-  if(!sel) return;
-  if(!profiles.find(p=>p.id===statsProfileId) && statsProfileId!=='all') statsProfileId = 'all';
-  sel.innerHTML = '<option value="all">Tout</option>' + profiles.map(p=>`<option value="${p.id}">${p.name}</option>`).join('');
-  sel.value = statsProfileId;
+  const wrap = document.getElementById('statsProfileCheckboxes');
+  if(!wrap) return;
+  // Nettoyer les ids invalides
+  [...statsProfileIds].forEach(id=>{ if(!profiles.find(p=>p.id===id)) statsProfileIds.delete(id); });
+
+  const allSelected = statsProfileIds.size === 0;
+  const allBtn = document.getElementById('statsSelectAllBtn');
+
+  wrap.innerHTML = profiles.map(p=>{
+    const checked = allSelected || statsProfileIds.has(p.id);
+    return `<button class="stats-profile-chip ${checked?'active':''}" data-pid="${p.id}"
+      style="background:${checked?'var(--ember)':'var(--surface)'};border:1px solid ${checked?'var(--ember)':'var(--border)'};
+      color:${checked?'#1a0d05':'var(--ash)'};padding:9px 16px;border-radius:100px;font-size:13px;
+      font-family:'Oswald',sans-serif;letter-spacing:0.03em;text-transform:uppercase;
+      min-height:40px;display:inline-flex;align-items:center;gap:7px;cursor:pointer;
+      transition:background .12s,color .12s,border-color .12s;">
+      ${checked ? '<span style="font-size:11px;">✓</span>' : ''}${p.name}
+    </button>`;
+  }).join('');
+
+  // Bouton "Tout sel." : actif si tout est sélectionné
+  if(allBtn){
+    allBtn.textContent = allSelected ? 'Tout désélect.' : 'Tout sel.';
+    allBtn.onclick = ()=>{
+      if(allSelected){
+        // Désélectionner = garder le premier seulement
+        statsProfileIds = new Set([profiles[0].id]);
+      } else {
+        statsProfileIds = new Set(); // tout
+      }
+      renderStatsProfileSelect();
+      renderStats();
+    };
+  }
+
+  wrap.querySelectorAll('.stats-profile-chip').forEach(btn=>{
+    btn.onclick = ()=>{
+      const pid = btn.dataset.pid;
+      if(statsProfileIds.size === 0){
+        // Actuellement "tout" — on passe à sélection unique = tout sauf celui-ci
+        statsProfileIds = new Set(profiles.map(p=>p.id).filter(id=>id!==pid));
+      } else if(statsProfileIds.has(pid)){
+        statsProfileIds.delete(pid);
+        if(statsProfileIds.size === 0) statsProfileIds = new Set(); // retour à "tout"
+      } else {
+        statsProfileIds.add(pid);
+        // Si on a tout coché manuellement → revenir à "tout"
+        if(statsProfileIds.size === profiles.length) statsProfileIds = new Set();
+      }
+      renderStatsProfileSelect();
+      renderStats();
+    };
+    btn.addEventListener('touchstart',()=>{},{passive:true});
+  });
 }
-document.getElementById('statsProfileSelect').onchange = ()=>{
-  statsProfileId = document.getElementById('statsProfileSelect').value;
-  renderStats();
-};
 function computeStreak(logsArr){
   const arr = logsArr || profileLogs();
   if(arr.length===0) return 0;
@@ -1539,11 +1687,6 @@ function renderProgress(){
 }
 document.getElementById('statExSelect').onchange = renderProgress;
 document.getElementById('statPeriodSelect').onchange = renderProgress;
-document.getElementById('statRecordRow').onclick = ()=>{
-  const ex = document.getElementById('statExSelect').value;
-  // Si la page records overlay est déjà ouverte on ouvre juste le form
-  openAddPRForm(ex);
-};
 
 function renderCurveChart(wrap, rows, metrics, exName, emomRows){
   const W = 640, H = 200, PAD_L = 8, PAD_R = 8, PAD_T = 30, PAD_B = 4;
@@ -1798,12 +1941,13 @@ async function loadPRs(){
 }
 function savePRs(){ sSet('forge-prs', prs); }
 
-/* Best PR per exercise+unit (un record par métrique) */
+/* Only the best PR per exercise (highest value) */
 function bestPRs(){
   const map = {};
   prs.forEach(pr=>{
-    const key = pr.exercise + '|' + (pr.unit||'reps');
-    if(!map[key] || pr.value > map[key].value) map[key] = pr;
+    if(!map[pr.exercise] || pr.value > map[pr.exercise].value){
+      map[pr.exercise] = pr;
+    }
   });
   return Object.values(map).sort((a,b)=> new Date(b.date) - new Date(a.date));
 }
@@ -1826,6 +1970,8 @@ function renderRecordsCard(){
 }
 
 /* Full records list page */
+let pendingDeletePREx = null;
+let pendingDeletePRExTimer = null;
 function renderRecordsList(){
   const list = document.getElementById('recordsList');
   const best = bestPRs();
@@ -1834,8 +1980,7 @@ function renderRecordsList(){
     return;
   }
   list.innerHTML = best.map(pr=>{
-    // compute previous best (même exercise + même unit)
-    const history = prs.filter(p=> p.exercise === pr.exercise && (p.unit||'reps') === (pr.unit||'reps')).sort((a,b)=> b.value - a.value);
+    const history = prs.filter(p=> p.exercise === pr.exercise).sort((a,b)=> b.value - a.value);
     const prev = history[1];
     const delta = prev ? (pr.value - prev.value) : null;
     const deltaHtml = delta !== null
@@ -1843,29 +1988,55 @@ function renderRecordsList(){
            ${delta >= 0 ? '↑' : '↓'} ${Math.abs(delta)}${pr.unit} vs précédent
          </div>`
       : '';
-    const dateStr = new Date(pr.date).toLocaleDateString('fr-FR',{day:'2-digit',month:'2-digit',year:'2-digit'});
-    return `<div class="pr-row" data-exname="${pr.exercise}" data-unit="${pr.unit||'reps'}">
+    const dateStr = new Date(pr.date).toLocaleDateString('fr-FR',{day:'2-digit',month:'short',year:'numeric'});
+    const pending = pendingDeletePREx === pr.exercise;
+    const delBtn = pending
+      ? `<button class="del-pr-btn confirm" data-delprhist="${pr.exercise}" style="background:var(--danger);color:#fff;border:none;border-radius:8px;padding:6px 10px;font-size:11px;font-family:'Oswald',sans-serif;text-transform:uppercase;letter-spacing:0.03em;white-space:nowrap;cursor:pointer;margin-left:10px;">Supprimer</button>`
+      : `<button class="del-pr-btn" data-delprhist="${pr.exercise}" style="background:none;border:none;color:var(--danger);font-size:22px;padding:0 4px;line-height:1;cursor:pointer;margin-left:8px;">×</button>`;
+    return `<div class="pr-row" data-exname="${pr.exercise}" style="cursor:pointer;">
       <div style="flex:1;min-width:0;">
         <div class="pr-row-name">${pr.exercise}</div>
         <div class="pr-row-sub">${dateStr}</div>
         ${deltaHtml}
       </div>
-      <div style="text-align:right;">
-        <span class="pr-row-val">${pr.value}</span><span class="pr-row-unit">${pr.unit}</span>
+      <div style="display:flex;align-items:center;">
+        <div style="text-align:right;">
+          <span class="pr-row-val">${pr.value}</span><span class="pr-row-unit">${pr.unit}</span>
+        </div>
+        ${delBtn}
       </div>
     </div>`;
   }).join('');
   list.querySelectorAll('.pr-row[data-exname]').forEach(row=>{
-    row.style.cursor = 'pointer';
-    row.onclick = ()=> openPRDetail(row.dataset.exname, row.dataset.unit);
+    row.onclick = (e)=>{
+      if(e.target.closest('.del-pr-btn')) return;
+      openPRDetail(row.dataset.exname);
+    };
+  });
+  list.querySelectorAll('.del-pr-btn').forEach(btn=>{
+    btn.onclick = (e)=>{
+      e.stopPropagation();
+      const exName = btn.dataset.delprhist;
+      clearTimeout(pendingDeletePRExTimer);
+      if(pendingDeletePREx === exName){
+        // Suppression effective : tous les PRs de cet exercice
+        prs = prs.filter(p=> p.exercise !== exName);
+        savePRs();
+        pendingDeletePREx = null;
+        renderRecordsList();
+        renderRecordsCard();
+      } else {
+        pendingDeletePREx = exName;
+        renderRecordsList();
+        pendingDeletePRExTimer = setTimeout(()=>{ pendingDeletePREx=null; renderRecordsList(); }, 3000);
+      }
+    };
   });
 }
 
 /* ---------------- PR DETAIL PAGE (graphique + historique d'un max) ---------------- */
-function prHistoryFor(exName, unit){
-  let res = prs.filter(p=>p.exercise===exName);
-  if(unit) res = res.filter(p=>(p.unit||'reps')===unit);
-  return res.sort((a,b)=> new Date(a.date) - new Date(b.date));
+function prHistoryFor(exName){
+  return prs.filter(p=>p.exercise===exName).sort((a,b)=> new Date(a.date) - new Date(b.date));
 }
 function renderPRChart(wrap, rows, unit){
   const W = 640, H = 190, PAD_L = 8, PAD_R = 8, PAD_T = 28, PAD_B = 4;
@@ -1888,9 +2059,11 @@ function renderPRChart(wrap, rows, unit){
     <div style="display:flex;margin-top:2px;">${labels}</div>
   `;
 }
-function renderPRDetail(exName, unit){
-  document.getElementById('prDetailTitle').textContent = exName + (unit ? ' · '+unit : '');
-  const rows = prHistoryFor(exName, unit); // ordre chronologique croissant
+let pendingDeletePRId = null;
+let pendingDeletePRIdTimer = null;
+function renderPRDetail(exName){
+  document.getElementById('prDetailTitle').textContent = exName;
+  const rows = prHistoryFor(exName); // ordre chronologique croissant
   const chartWrap = document.getElementById('prDetailChartWrap');
   if(rows.length===0){
     chartWrap.innerHTML = '<div class="empty">Pas de données.</div>';
@@ -1899,7 +2072,7 @@ function renderPRDetail(exName, unit){
   }
   const histEl = document.getElementById('prDetailHistory');
   if(rows.length===0){
-    histEl.innerHTML = '';
+    histEl.innerHTML = '<div class="empty">Aucune entrée pour cet exercice.</div>';
     return;
   }
   const desc = rows.slice().reverse(); // plus récent en premier
@@ -1911,19 +2084,46 @@ function renderPRDetail(exName, unit){
       ? `<div class="pr-row-delta ${delta < 0 ? 'neg':''}">${delta >= 0 ? '↑' : '↓'} ${Math.abs(delta)}${pr.unit} vs précédent</div>`
       : `<div class="pr-row-delta">Première saisie</div>`;
     const dateStr = fmtDate(pr.date);
-    return `<div class="pr-row">
+    const pending = pendingDeletePRId === pr.id;
+    const delBtn = pending
+      ? `<button class="del-prid-btn confirm" data-prdelid="${pr.id}" style="background:var(--danger);color:#fff;border:none;border-radius:8px;padding:6px 10px;font-size:11px;font-family:'Oswald',sans-serif;text-transform:uppercase;letter-spacing:0.03em;white-space:nowrap;cursor:pointer;margin-left:8px;">Supprimer</button>`
+      : `<button class="del-prid-btn" data-prdelid="${pr.id}" style="background:none;border:none;color:var(--danger);font-size:22px;padding:0 4px;line-height:1;cursor:pointer;margin-left:6px;">×</button>`;
+    return `<div class="pr-row" data-prid="${pr.id}">
       <div style="flex:1;min-width:0;">
         <div class="pr-row-sub">${dateStr}</div>
         ${deltaHtml}
       </div>
-      <div style="text-align:right;">
-        <span class="pr-row-val">${pr.value}</span><span class="pr-row-unit">${pr.unit}</span>
+      <div style="display:flex;align-items:center;">
+        <div style="text-align:right;">
+          <span class="pr-row-val">${pr.value}</span><span class="pr-row-unit">${pr.unit}</span>
+        </div>
+        ${delBtn}
       </div>
     </div>`;
   }).join('');
+  histEl.querySelectorAll('.del-prid-btn').forEach(btn=>{
+    btn.onclick = (e)=>{
+      e.stopPropagation();
+      const id = btn.dataset.prdelid;
+      clearTimeout(pendingDeletePRIdTimer);
+      if(pendingDeletePRId === id){
+        prs = prs.filter(p=> p.id !== id);
+        savePRs();
+        pendingDeletePRId = null;
+        renderPRDetail(exName);
+        // Refresh records list if open
+        if(document.getElementById('recordsOverlay').classList.contains('open')) renderRecordsList();
+        renderRecordsCard();
+      } else {
+        pendingDeletePRId = id;
+        renderPRDetail(exName);
+        pendingDeletePRIdTimer = setTimeout(()=>{ pendingDeletePRId=null; renderPRDetail(exName); }, 3000);
+      }
+    };
+  });
 }
-function openPRDetail(exName, unit){
-  renderPRDetail(exName, unit);
+function openPRDetail(exName){
+  renderPRDetail(exName);
   document.getElementById('prDetailOverlay').classList.add('open');
 }
 document.getElementById('prDetailBackBtn').onclick = ()=>{
@@ -1941,106 +2141,53 @@ document.getElementById('recordsBackBtn').onclick = ()=>{
 };
 
 /* Add PR form */
-function openAddPRForm(preselect){
+function openAddPRForm(){
   // Populate exercise select
   const sel = document.getElementById('prExSelect');
   sel.innerHTML = exercises.map(e=>`<option value="${e.name}">${e.name}</option>`).join('');
-  if(preselect && exercises.find(e=>e.name===preselect)) sel.value = preselect;
   // Set today's date
   const today = new Date().toISOString().split('T')[0];
   document.getElementById('prDateInput').value = today;
-  // Rendu dynamique des steppers selon les fields de l'exercice
-  const FIELD_META = {
-    reps:    { label:'Répétitions', unit:'reps', step:1,   id:'prFldReps' },
-    weight:  { label:'Poids',       unit:'kg',   step:0.5, id:'prFldWeight' },
-    seconds: { label:'Durée',       unit:'s',    step:1,   id:'prFldSeconds' },
-  };
-  function renderPRFields(){
-    const zone = document.getElementById('prFieldsZone');
-    const allFields = ['reps','weight','seconds'];
-    zone.innerHTML = allFields.map(f=>{
-      const m = FIELD_META[f];
-      if(!m) return '';
-      return `<div class="field">
-        <label>${m.label}</label>
-        <div style="display:flex;gap:8px;align-items:center;">
-          <div class="stepper" style="flex:1;">
-            <button class="stepbtn" data-id="${m.id}" data-step="${m.step}" data-dir="-1">−</button>
-            <input type="number" id="${m.id}" value="0" min="0" step="${m.step}">
-            <button class="stepbtn" data-id="${m.id}" data-step="${m.step}" data-dir="1">+</button>
-            <span class="unit">${m.unit}</span>
-          </div>
-        </div>
-      </div>`;
-    }).join('');
-    zone.querySelectorAll('.stepbtn').forEach(btn=>{
-      btn.onclick = ()=>{
-        const inp = document.getElementById(btn.dataset.id);
-        const step = parseFloat(btn.dataset.step)||1;
-        const dir = parseFloat(btn.dataset.dir);
-        inp.value = Math.max(0, parseFloat(inp.value||0) + dir*step);
-      };
-    });
+  // Update unit on change
+  function updateUnit(){
+    const unit = prUnitFor(sel.value);
+    document.getElementById('prValUnit').textContent = unit;
+    document.getElementById('prValInput').step = unit === 'kg' ? '0.5' : '1';
   }
-  renderPRFields();
-  // Créer un exercice inline
-  const createBtn = document.getElementById('prCreateExBtn');
-  const zone = document.getElementById('prNewExZone');
-  zone.innerHTML = '';
-  createBtn.textContent = '+ Créer un exercice';
-  createBtn.onclick = ()=>{
-    if(zone.innerHTML){ zone.innerHTML=''; createBtn.textContent='+ Créer un exercice'; return; }
-    renderInlineNewExForm(zone, (name)=>{
-      sel.innerHTML = exercises.map(e=>`<option value="${e.name}">${e.name}</option>`).join('');
-      sel.value = name;
-      updateUnit();
-      zone.innerHTML='';
-      createBtn.textContent='+ Créer un exercice';
-    });
-    createBtn.textContent='✕ Annuler';
+  sel.onchange = updateUnit;
+  updateUnit();
+  // Steppers
+  document.getElementById('prValMinus').onclick = ()=>{
+    const inp = document.getElementById('prValInput');
+    const step = parseFloat(inp.step)||1;
+    inp.value = Math.max(0, parseFloat(inp.value||0) - step);
+  };
+  document.getElementById('prValPlus').onclick = ()=>{
+    const inp = document.getElementById('prValInput');
+    const step = parseFloat(inp.step)||1;
+    inp.value = parseFloat(inp.value||0) + step;
   };
   // Show it
   document.getElementById('addPROverlay').classList.add('open');
-  // Focus premier champ numérique dispo
-  const firstInp = document.querySelector('#prFieldsZone input[type=number]');
-  if(firstInp) firstInp.focus();
+  document.getElementById('prValInput').focus();
 }
-document.getElementById('addPRBtn').onclick = ()=> openAddPRForm();
+document.getElementById('addPRBtn').onclick = openAddPRForm;
 document.getElementById('cancelPRBtn').onclick = ()=>{
   document.getElementById('addPROverlay').classList.remove('open');
 };
 document.getElementById('confirmPRBtn').onclick = ()=>{
   const exName = document.getElementById('prExSelect').value;
-  // Lire la valeur du field primaire + construire le label composite
-  const fields = exFields(exName);
-  const FIELD_META_C = {
-    reps:    { id:'prFldReps',    unit:'reps' },
-    weight:  { id:'prFldWeight',  unit:'kg'   },
-    seconds: { id:'prFldSeconds', unit:'s'    },
-  };
-  // On sauvegarde un PR par field non-nul
-  const date = document.getElementById('prDateInput').value
-                 ? new Date(document.getElementById('prDateInput').value).toISOString()
-                 : new Date().toISOString();
-  let saved = 0;
-  fields.forEach(f=>{
-    const m = FIELD_META_C[f];
-    if(!m) return;
-    const inp = document.getElementById(m.id);
-    if(!inp) return;
-    const value = parseFloat(inp.value) || 0;
-    if(value <= 0) return;
-    prs.push({ id: 'pr'+Date.now().toString(36)+f, exercise: exName, value, unit: m.unit, date });
-    saved++;
-  });
-  if(!exName || saved === 0){ return; }
+  const value  = parseFloat(document.getElementById('prValInput').value) || 0;
+  const unit   = prUnitFor(exName);
+  const date   = document.getElementById('prDateInput').value
+                   ? new Date(document.getElementById('prDateInput').value).toISOString()
+                   : new Date().toISOString();
+  if(!exName || value <= 0){ return; }
+  prs.push({ id: 'pr'+Date.now().toString(36), exercise: exName, value, unit, date });
   savePRs();
   document.getElementById('addPROverlay').classList.remove('open');
   renderRecordsList();
   renderRecordsCard();
-  // Sync vers la page progression si l'exercice correspond
-  const statSel = document.getElementById('statExSelect');
-  if(statSel && statSel.value === exName) renderProgress();
   if(document.getElementById('prDetailOverlay').classList.contains('open') && document.getElementById('prDetailTitle').textContent === exName){
     renderPRDetail(exName);
   }
