@@ -232,6 +232,11 @@ select{font-family:'Inter',sans-serif;}
 .profiledropdown .addform{padding:4px 16px 14px;display:none;gap:8px;}
 .profiledropdown .addform input{flex:1;}
 
+/* month slider */
+#monthSlider::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;width:22px;height:22px;border-radius:50%;background:var(--ember);cursor:pointer;border:2px solid var(--bg);box-shadow:0 0 0 2px var(--ember);}
+#monthSlider::-moz-range-thumb{width:22px;height:22px;border-radius:50%;background:var(--ember);cursor:pointer;border:2px solid var(--bg);}
+#monthSlider::-webkit-slider-runnable-track{height:4px;border-radius:2px;background:linear-gradient(to right, var(--ember) 0%, var(--ember) var(--pct,0%), var(--border) var(--pct,0%), var(--border) 100%);}
+
 /* seance list */
 .seance-day-title{font-family:'Oswald',sans-serif;font-size:13px;color:var(--ash);text-transform:uppercase;letter-spacing:0.05em;margin:4px 0 10px;}
 .seancerow{display:flex;align-items:center;justify-content:space-between;padding:18px 16px;background:var(--surface);border:1px solid var(--border);border-radius:12px;margin-bottom:10px;min-height:60px;}
@@ -327,20 +332,29 @@ select{font-family:'Inter',sans-serif;}
       <div class="records-card-arrow">›</div>
     </div>
 
+    <!-- CURSEUR MOIS/ANNÉE UNIFIÉ -->
+    <div id="monthSliderWrap" class="card" style="padding:14px 16px 10px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
+        <label style="margin-bottom:0;font-size:12px;">Période</label>
+        <span id="monthSliderLabel" style="font-family:'Oswald',sans-serif;font-size:16px;letter-spacing:0.04em;color:var(--ember);">Tout</span>
+      </div>
+      <div style="display:flex;align-items:center;gap:10px;">
+        <button id="monthSliderPrev" style="background:none;border:none;color:var(--ash);font-size:22px;padding:0 4px;cursor:pointer;line-height:1;flex-shrink:0;">‹</button>
+        <input type="range" id="monthSlider" min="0" max="0" value="0"
+          style="flex:1;-webkit-appearance:none;appearance:none;height:4px;border-radius:2px;background:var(--border);outline:none;cursor:pointer;">
+        <button id="monthSliderNext" style="background:none;border:none;color:var(--ash);font-size:22px;padding:0 4px;cursor:pointer;line-height:1;flex-shrink:0;">›</button>
+      </div>
+      <div style="display:flex;justify-content:space-between;margin-top:6px;">
+        <span id="monthSliderMin" style="font-size:10px;color:var(--ash);font-family:'JetBrains Mono',monospace;"></span>
+        <span id="monthSliderMax" style="font-size:10px;color:var(--ash);font-family:'JetBrains Mono',monospace;"></span>
+      </div>
+    </div>
+
     <div class="card">
       <div style="display:flex;gap:10px;margin-bottom:10px;align-items:flex-end;">
         <div class="field" style="flex:1;margin-bottom:0;">
           <label>Progression</label>
           <select id="statExSelect"></select>
-        </div>
-        <div class="field" style="flex:1;margin-bottom:0;">
-          <label>Période</label>
-          <select id="statPeriodSelect">
-            <option value="all">Tout</option>
-            <option value="year">Année</option>
-            <option value="month">Mois</option>
-            <option value="week">Semaine</option>
-          </select>
         </div>
       </div>
       <div class="record"><span class="val num" id="statRecord">—</span><span class="lbl">Record perso</span></div>
@@ -1469,9 +1483,12 @@ function setPillText(s){
 function renderHistory(){
   const filter = document.getElementById('filterEx').value;
   const el = document.getElementById('historyCard');
-  const rows = statsLogs().filter(l=> !filter || l.exercise===filter);
+  const mf = getMonthFilter();
+  let rows = statsLogs().filter(l=> !filter || l.exercise===filter);
+  if(mf) rows = rows.filter(l=>{ const d=new Date(l.date); return d>=mf.start && d<mf.end; });
   if(rows.length===0){
-    el.innerHTML = '<div class="card"><div class="empty">Pas encore de séance enregistrée.</div></div>';
+    const msg = mf ? 'Aucune séance ce mois-là.' : 'Pas encore de séance enregistrée.';
+    el.innerHTML = `<div class="card"><div class="empty">${msg}</div></div>`;
     return;
   }
 
@@ -1638,6 +1655,7 @@ function computeStreak(logsArr){
 function renderStreak(){ /* streak badge supprimé */ }
 function renderStats(){
   renderStatsProfileSelect();
+  buildMonthSlider();
   renderProgress();
   renderHistory();
   renderRecordsCard();
@@ -1648,37 +1666,144 @@ const METRIC_META = {
   reps:   {label:'Répétitions', unit:'', color:'var(--rest)'},
   seconds:{label:'Durée', unit:'s', color:'var(--amber)'}
 };
-function periodStart(period){
-  const now = new Date();
-  if(period==='week'){ const d=new Date(now); d.setDate(d.getDate()-7); return d; }
-  if(period==='month'){ return new Date(now.getFullYear(), now.getMonth(), 1); }
-  if(period==='year'){ return new Date(now.getFullYear(), 0, 1); }
-  return null; // 'all'
+
+/* ============================================================
+   CURSEUR MOIS/ANNÉE UNIFIÉ
+   monthSliderMonths : tableau trié ['all', 'YYYY-MM', 'YYYY-MM', ...]
+   index 0 = "Tout", index 1+ = mois chronologiques du plus ancien au plus récent
+   ============================================================ */
+let monthSliderMonths = ['all'];
+let monthSliderIdx = 0; // 0 = Tout
+
+function buildMonthSlider(){
+  const allLogs = statsLogs();
+  const set = new Set();
+  allLogs.forEach(l=>{
+    const d = new Date(l.date);
+    const key = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+    set.add(key);
+  });
+  const sorted = [...set].sort();
+  monthSliderMonths = ['all', ...sorted];
+
+  const slider = document.getElementById('monthSlider');
+  const max = monthSliderMonths.length - 1;
+  slider.max = max;
+  // Garder idx valide
+  if(monthSliderIdx > max) monthSliderIdx = max;
+  slider.value = monthSliderIdx;
+  updateSliderTrack();
+  updateMonthSliderLabels();
+
+  // Afficher/masquer le slider selon qu'il y a des données
+  const wrap = document.getElementById('monthSliderWrap');
+  wrap.style.display = max === 0 ? 'none' : '';
 }
+
+function updateSliderTrack(){
+  const slider = document.getElementById('monthSlider');
+  const max = +slider.max || 1;
+  const val = +slider.value;
+  const pct = max === 0 ? 0 : (val / max * 100);
+  slider.style.setProperty('--pct', pct + '%');
+}
+
+function updateMonthSliderLabels(){
+  const idx = monthSliderIdx;
+  const labelEl = document.getElementById('monthSliderLabel');
+  const minEl = document.getElementById('monthSliderMin');
+  const maxEl = document.getElementById('monthSliderMax');
+
+  if(idx === 0){
+    labelEl.textContent = 'Tout';
+  } else {
+    const key = monthSliderMonths[idx]; // 'YYYY-MM'
+    const [y, m] = key.split('-');
+    const d = new Date(+y, +m - 1, 1);
+    labelEl.textContent = d.toLocaleDateString('fr-FR', {month:'long', year:'numeric'});
+  }
+
+  // Extrêmes
+  if(monthSliderMonths.length > 1){
+    const first = monthSliderMonths[1];
+    const last = monthSliderMonths[monthSliderMonths.length - 1];
+    const fmt = key => {
+      const [y,m] = key.split('-');
+      return new Date(+y,+m-1,1).toLocaleDateString('fr-FR',{month:'short',year:'2-digit'});
+    };
+    minEl.textContent = 'Tout';
+    maxEl.textContent = fmt(last);
+  } else {
+    minEl.textContent = '';
+    maxEl.textContent = '';
+  }
+}
+
+function getMonthFilter(){
+  // Retourne {start, end} pour le mois sélectionné, ou null si "Tout"
+  if(monthSliderIdx === 0) return null;
+  const key = monthSliderMonths[monthSliderIdx];
+  const [y, m] = key.split('-').map(Number);
+  const start = new Date(y, m - 1, 1);
+  const end = new Date(y, m, 1); // premier jour du mois suivant (exclusif)
+  return {start, end};
+}
+
+(()=>{
+  const slider = document.getElementById('monthSlider');
+  const prev = document.getElementById('monthSliderPrev');
+  const next = document.getElementById('monthSliderNext');
+
+  slider.oninput = ()=>{
+    monthSliderIdx = +slider.value;
+    updateSliderTrack();
+    updateMonthSliderLabels();
+    renderProgress();
+    renderHistory();
+  };
+  prev.onclick = ()=>{
+    if(monthSliderIdx > 0){
+      monthSliderIdx--;
+      slider.value = monthSliderIdx;
+      updateSliderTrack();
+      updateMonthSliderLabels();
+      renderProgress();
+      renderHistory();
+    }
+  };
+  next.onclick = ()=>{
+    if(monthSliderIdx < monthSliderMonths.length - 1){
+      monthSliderIdx++;
+      slider.value = monthSliderIdx;
+      updateSliderTrack();
+      updateMonthSliderLabels();
+      renderProgress();
+      renderHistory();
+    }
+  };
+})();
+
 function renderProgress(){
   const ex = document.getElementById('statExSelect').value;
-  const period = document.getElementById('statPeriodSelect').value;
-  const cutoff = periodStart(period);
+  const mf = getMonthFilter();
   const fields = exFields(ex);
   const order = ['weight','reps','seconds'];
   const metrics = order.filter(f=>fields.includes(f));
   const m = primaryMetric(ex);
   const unit = METRIC_META[m] ? METRIC_META[m].unit : '';
   let allRows = statsLogs().filter(l=>l.exercise===ex);
-  if(cutoff) allRows = allRows.filter(l=> new Date(l.date) >= cutoff);
+  if(mf) allRows = allRows.filter(l=>{ const d=new Date(l.date); return d>=mf.start && d<mf.end; });
   const record = allRows.reduce((a,l)=> Math.max(a, l.sets.reduce((b,s)=>Math.max(b, s[m]||0),0)), 0);
   const prRecord = prs.filter(p=>p.exercise===ex).sort((a,b)=>b.value-a.value)[0];
   const finalVal = prRecord ? Math.max(record, prRecord.value) : record;
   document.getElementById('statRecord').textContent = allRows.length || prRecord ? (finalVal+unit) : '—';
   const wrap = document.getElementById('progressCurveWrap');
-  // Grouper par session, ordre chronologique, max 40 points
   const bySession = {};
   allRows.forEach(l=>{ if(!bySession[l.sessionId||l.id]) bySession[l.sessionId||l.id]={date:l.date,log:l}; });
   let rows = Object.values(bySession).sort((a,b)=>new Date(a.date)-new Date(b.date)).map(s=>s.log);
   if(rows.length > 40) rows = rows.slice(rows.length-40);
-  // Chercher logs EMOM pour cet exercice dans la même période (_fromEmom = loggé depuis un bloc EMOM)
   let emomRows = statsLogs().filter(l=> l._fromEmom && l.exercise===ex);
-  if(cutoff) emomRows = emomRows.filter(l=> new Date(l.date) >= cutoff);
+  if(mf) emomRows = emomRows.filter(l=>{ const d=new Date(l.date); return d>=mf.start && d<mf.end; });
   if(rows.length===0 && emomRows.length===0){
     wrap.innerHTML = '<div class="empty">Pas de données pour cet exercice sur cette période.</div>';
     return;
@@ -1686,7 +1811,6 @@ function renderProgress(){
   renderCurveChart(wrap, rows, metrics, ex, emomRows);
 }
 document.getElementById('statExSelect').onchange = renderProgress;
-document.getElementById('statPeriodSelect').onchange = renderProgress;
 
 function renderCurveChart(wrap, rows, metrics, exName, emomRows){
   const W = 640, H = 200, PAD_L = 8, PAD_R = 8, PAD_T = 30, PAD_B = 4;
